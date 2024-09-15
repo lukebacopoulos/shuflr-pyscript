@@ -45,9 +45,21 @@ def choose_playlist(sp):
     return selected_playlist
 
 def get_saved_tracks(sp, num_tracks=OFFSET_LIMIT):
+    total_saved = get_total_saved_tracks(sp)
     track_ids = []
-    results = sp.current_user_saved_tracks(limit=OFFSET_LIMIT)
     
+    if total_saved <= num_tracks:
+        # If total saved tracks are less than the number of tracks needed
+        results = sp.current_user_saved_tracks(limit=num_tracks)
+        track_ids = [track['track']['id'] for track in results['items'] if track['track']]
+        return track_ids[:num_tracks]
+
+    # Calculate a valid random offset
+    max_offset = math.floor(total_saved / OFFSET_LIMIT) * OFFSET_LIMIT
+    rand_offset = random.randint(0, max_offset - OFFSET_LIMIT)
+    
+    results = sp.current_user_saved_tracks(limit=OFFSET_LIMIT, offset=rand_offset)
+
     while results and len(track_ids) < num_tracks:
         track_ids.extend(track['track']['id'] for track in results['items'] if track['track'])
         if results['next']:
@@ -58,9 +70,31 @@ def get_saved_tracks(sp, num_tracks=OFFSET_LIMIT):
     return track_ids[:num_tracks]
 
 def get_playlist_tracks(sp, playlist_id, num_tracks=OFFSET_LIMIT, offset=0):
-    tracks = sp.playlist_tracks(playlist_id, limit=num_tracks, offset=offset)
-    track_ids = [track['track']['id'] for track in tracks['items'] if track['track']]
-    return track_ids
+    total_tracks = get_total_playlist(sp, playlist_id)
+    track_ids = []
+
+    if total_tracks <= num_tracks:
+        # Fetch all tracks if the total number of tracks is less than or equal to num_tracks
+        results = sp.playlist_tracks(playlist_id, limit=num_tracks)
+        track_ids = [track['track']['id'] for track in results['items'] if track['track']]
+        return track_ids[:num_tracks]
+
+    # Calculate a valid random offset if needed
+    max_offset = math.floor(total_tracks / OFFSET_LIMIT) * OFFSET_LIMIT
+    if offset == 0:
+        # Randomize the offset if not provided
+        offset = random.randint(0, max_offset - OFFSET_LIMIT)
+    
+    results = sp.playlist_tracks(playlist_id, limit=OFFSET_LIMIT, offset=offset)
+
+    while results and len(track_ids) < num_tracks:
+        track_ids.extend(track['track']['id'] for track in results['items'] if track['track'])
+        if results['next']:
+            results = sp.next(results)
+        else:
+            break
+
+    return track_ids[:num_tracks]
 
 def push_to_queue(sp, track_ids):
     for track in track_ids:
